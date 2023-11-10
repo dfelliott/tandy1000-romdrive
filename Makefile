@@ -1,4 +1,6 @@
-FILES=t1kdrv.img t1kdrv.sys
+FILES=t1kdrv.img t1kdrv.sys empty.img
+
+BASE_IMAGE=empty.img
 
 
 all: t1kdrv.img
@@ -10,7 +12,10 @@ clean:
 %.sys: %.asm
 	nasm -o $@ $<
 
-%.img: %.sys
+empty.img:
 	dd if=/dev/zero bs=512 count=1440 of=$@
 	mformat -i $@ -f 720
-	mcopy -i $@ -m $< ::/
+
+%.img: %.sys $(BASE_IMAGE)
+	cp "$(BASE_IMAGE)" $@
+	mcopy -i $@ -m $< config.sys autoexec.bat ::/

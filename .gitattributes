@@ -1,0 +1,2 @@
+config.sys text eol=crlf
+autoexec.bat text eol=crlf

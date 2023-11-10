@@ -1,0 +1,2 @@
+@ECHO Booted
+@ECHO OFF
