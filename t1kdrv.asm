@@ -229,7 +229,7 @@ drive_data:
         at .volname,            db 'NO NAME    '
         ; Remainder uninitialized (0)
 ;        at .device_type,        db 5
-;        at .device_flags,       db 0xd
+;        at .device_flags,       db 0x2d
 ;        at .access_cyl,         dw 0xFF
 ;        at .access,             dw 0xFFFF
 ;                                dw 0xFFFF
@@ -367,7 +367,17 @@ init:
     mov byte [di], 5
 
     inc di
-    mov byte [di], 0xd
+    mov byte [di], 0x2d
+    ; 0x2d = 10 1101
+    ; IMPORTANT: bit 5 is documented in MS-DOS 4 source to indicate that this
+    ; logical drive is the current owner of the physical (BIOS) drive.  It is
+    ; critically important that exactly one entry in the BDS list have this flag,
+    ; especially if it is the only one.
+    ; If bit 5 clear, internal DOS code in IOCTL$GETOWN assumes there must be
+    ; more entries and will attempt to follow FFFF:FFFFh and fail.
+    ; Bit 3, 2, and 0 are much more obvious, corrsponding to a consistent
+    ; number of sectors per track, a fixed BPB (no need to read sector 0), and
+    ; non-removable media.
 
     mov di, [ptr_drive_data_access_cyl]
     xor ax, ax
