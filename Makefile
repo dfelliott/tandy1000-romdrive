@@ -16,6 +16,6 @@ empty.img:
 	dd if=/dev/zero bs=512 count=1440 of=$@
 	mformat -i $@ -f 720
 
-%.img: %.sys $(BASE_IMAGE)
+%.img: %.sys $(BASE_IMAGE) $(EXTRA_FILES)
 	cp "$(BASE_IMAGE)" $@
-	mcopy -i $@ -m $< config.sys autoexec.bat ::/
+	mcopy -i $@ -m $< config.sys autoexec.bat $(EXTRA_FILES) ::/
