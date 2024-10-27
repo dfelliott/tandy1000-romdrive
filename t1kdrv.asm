@@ -215,6 +215,94 @@ INTERRUPT:
     retf
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; INT 13 Hook
+; Workaround for BIOS bug where functions 8 and 0x15 fail to restore the page
+; This code operates very differently but achieves the same purpose as
+; code found in Tandy DOS 3.30.20.
+
+INT_13:
+    pushf
+    ; Is drive 8?
+    cmp dl, 8
+    je .drive_8
+
+    jmp .not_broken
+
+.drive_8:
+    ; Is command "Get Drive Parameters"?
+    cmp ah, 8
+    je .fix_broken
+    ; Is command "Get Disk Type"?
+    cmp ah, 0x15
+    je .fix_broken
+
+.not_broken:
+    popf
+    ; Jump to the original handler
+    jmp far [CS:.fptr]
+
+.get_page_failed:
+    popf
+    pop ax
+    pop bp
+    jmp .not_broken
+
+.fix_broken:
+    popf                                ; Restore original flags
+; SP -> IRET data
+
+    push bp
+    mov bp, sp
+; SP = BP, BP -> original BP
+
+    push ax                             ; Save original AX
+; SP = BP-2 -> original AX
+
+    pushf                               ; Save original flags
+                                        ; and simulate INT (call)
+; SP = BP-4 -> flags
+    clc
+    mov ax, 0x7002                      ; Get page number
+    int 0x15
+    jc .get_page_failed
+    ;popf                                ; Restore original flags
+; SP = BP-2 -> original AX
+
+    xchg word ss:[bp - 2], ax           ; Page number on stack, AX restored
+; SP = BP-2 -> page number
+
+    ;pushf                               ; Simulate INT
+    call far [CS:.fptr]
+    ; Return either A) did a genuine iret so restored original flags,
+    ; or B) did a RETF 2 to intentionally set different flags
+
+    xchg dx, word ss:[bp - 2]           ; page number in DX, DX saved
+; SP = BP-2 -> returned DX
+
+    push ax                             ; Save returned AX
+; SP = BP-4 -> returned AX
+    pushf                               ; Save handler returned flags
+; SP = BP-6 -> returned flags
+
+    mov ax, 0x7003                      ; Set ROM page (to DL)
+    int 0x15
+
+    popf                                ; Restore returned flags
+; SP = BP-4 -> returned AX
+    pop ax                              ; Restore returned AX
+; SP = BP-2 -> returned DX
+    pop dx                              ; Restore saved DX
+; SP = BP -> original BP
+
+    pop bp                              ; Restore BP
+; SP -> IRET data
+    retf 2                              ; Simulate IRET w/o restoring flags
+align 2
+    .fptr:
+        dd 0
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Resident Data Section
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -539,7 +627,25 @@ init:
     sub al, byte '@'                    ; Convert letter to 1-based number
     mov word [0xc2], ax                 ; Write to BDA
 
+    ; Now install the INT 13 handler
+    xor ax, ax
+    mov ds, ax                          ; DS = 0
+
+    mov ax, ds:[0x13 * 4]
+    mov cs:[INT_13.fptr], ax
+    mov ax, ds:[0x13 * 4 + 2]
+    mov cs:[INT_13.fptr + 2], ax
+
+    push cs
+    pop ax
+    mov word ds:[0x13 * 4], INT_13
+    mov ds:[0x13 * 4 + 2], ax
+
     pop ds                              ; Restore DS
+
+    ; Print INT13 success
+    mov dx, s_hooked_int13
+    call dos_puts_cs_dx
 
     xor ax, ax
     jmp .exit_done
@@ -607,6 +713,9 @@ s_installed:
     db 'Tandy ROM drive at '
 .letter:
     db '::', 13, 10, '$'
+
+s_hooked_int13:
+    db 'Hooked INT 13h for ROM page safety', 13, 10, '$'
 
 s_unsupported_dos:
     db 'Unsupported DOS Version', 13, 10, '$'
