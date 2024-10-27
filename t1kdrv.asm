@@ -526,6 +526,21 @@ init:
     mov dx, s_installed
     call dos_puts_cs_dx
 
+    ; AL still contains the drive letter
+
+    push ds                             ; Save DS
+
+    push ax
+    mov ax, 0x40
+    mov ds, ax                          ; DS = 40h (BDA)
+    pop ax
+
+    xor ah, ah
+    sub al, byte '@'                    ; Convert letter to 1-based number
+    mov word [0xc2], ax                 ; Write to BDA
+
+    pop ds                              ; Restore DS
+
     xor ax, ax
     jmp .exit_done
 
